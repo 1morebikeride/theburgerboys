@@ -64,4 +64,13 @@ data$P29 <- as.factor(data$P29)
 ##make changes
 
 
+### basic ridge and lasso
+
+#gam
+
+#rf
+
+
+
+
 
