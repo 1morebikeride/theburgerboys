@@ -66,57 +66,6 @@ traindata$P29 <- as.factor(traindata$P29)
 
 
 
-testdata <- read.csv("test.csv")
-
-##clean test_data
-
-### same as train
-
-testdata <- select(testdata, -P14, -P15, -P16, -P17, -P18, -P24, -P25, -P26, -P27, -P30, -P31, -P32, -P33, -P34, -P35, -P36, -P37)
-
-
-# extract the year from the character date
-testdata$year <- substr(testdata$Open.Date, start = nchar(testdata$Open.Date) - 3, stop = nchar(testdata$Open.Date))
-
-testdata$year <- as.numeric(testdata$year)
-testdata$age <- 2015 - testdata$year
-
-testdata <- select(testdata, -Open.Date)
-testdata <- select(testdata, -year)
-testdata <- select(testdata, -Id)
-
-
-testdata$City <- as.factor(testdata$City)
-
-testdata$City.Group <- as.factor(testdata$City.Group)
-
-testdata$Type <- as.factor(testdata$Type)
-
-testdata$P1 <- as.factor(testdata$P1)
-
-testdata$P2 <- as.factor(testdata$P2)
-testdata$P3 <- as.factor(testdata$P3)
-testdata$P4 <- as.factor(testdata$P4)
-testdata$P5 <- as.factor(testdata$P5)
-testdata$P6 <- as.factor(testdata$P6)
-testdata$P7 <- as.factor(testdata$P7)
-testdata$P8 <- as.factor(testdata$P8)
-testdata$P9 <- as.factor(testdata$P9)
-testdata$P10 <- as.factor(testdata$P10)
-testdata$P11 <- as.factor(testdata$P11)
-testdata$P12 <- as.factor(testdata$P12)
-
-testdata$P13 <- as.factor(testdata$P13)
-testdata$P19 <- as.factor(testdata$P19)
-testdata$P20 <- as.factor(testdata$P20)
-
-testdata$P21 <- as.factor(testdata$P21)
-testdata$P22 <- as.factor(testdata$P22)
-testdata$P23 <- as.factor(testdata$P23)
-
-testdata$P28 <- as.factor(testdata$P28)
-testdata$P29 <- as.factor(testdata$P29)
-
 
 
 
@@ -130,25 +79,18 @@ set.seed(1)
 
 #traindata[is.na(traindata)] <- 0
 
-### we downloaded, just the training data
+### we downloaded, just the training data, test data does not have revenue
 
-x_train <- traindata[, -which(names(data) == "revenue")]
+x_train <- model.matrix(revenue ~ ., traindata)[, -1]
 
-#something wrong with matrix cannot run code
-#x_train <- as.matrix(x_train)
+y_train <- traindata$revenue
 
-y_train <- traindata[, "revenue"]
-
-x_test <- testdata[, -which(names(data) == "revenue")]
-
-
-y_test <- testdata[, "revenue"]
 
 
 grid = 10^seq(-2, 4,length=200)
 
 
-ridge_mod <- glmnet(x_train, y_train, lambda = grid, alpha = 1)
+ridge_mod <- glmnet(x_train, y_train, lambda = grid, alpha = 0)
 
 cv.ridge <- cv.glmnet(x_train, y_train, lambda = grid, alpha = 0, nfolds = 12)
 
@@ -157,8 +99,8 @@ bestlam_ridge <- cv.ridge$lambda.min
 
 ridge.pred <- predict(ridge_mod, 
                       s=bestlam_ridge, 
-                      newx=x_test)
-ridge_mse <- mean((ridge.pred-y.test)^2)
+                      newx=x_train)
+ridge_mse <- mean((ridge.pred-y_train)^2)
 
 
 
@@ -168,13 +110,12 @@ cv.lasso <- cv.glmnet(x_train, y_train, lambda = grid, alpha = 1, nfolds = 12)
 
 bestlam_lasso <- cv.lasso$lambda.min
 
-lasso.pred <- predict(lasso_mod, 
+lasso.pred <- predict(lasso.mod, 
                       s=bestlam_lasso, 
-                      newx=x_test)
-lasso_mse <- mean((lasso.pred-y.test)^2)
+                      newx=x_train)
+lasso_mse <- mean((lasso.pred-y_train)^2)
 
 
-#### test accuracy
 
 
 #Gradient Boosting Machine
