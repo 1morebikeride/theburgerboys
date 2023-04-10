@@ -66,7 +66,7 @@ traindata$P29 <- as.factor(traindata$P29)
 
 
 
-testdata <- read.csv("test")
+testdata <- read.csv("test.csv")
 
 ##clean test_data
 
@@ -177,11 +177,77 @@ lasso_mse <- mean((lasso.pred-y.test)^2)
 #### test accuracy
 
 
-#gam
+#Gradient Boosting Machine
+library(gbm)
+library(caret)
+n_trees <- 100
+learning_rate <- 0.01
+interaction_depth <- 5
 
-#rf
+#predictor_names <- colnames(traindata)
+#predictor_names <- predictor_names[-c(1,2,24)]
+#predictors <- traindata[, predictor_names]
+#response <- traindata$revenue
+
+gbm_model <- gbm(revenue ~ ., data=traindata, n.trees = n_trees, shrinkage = learning_rate, interaction.depth = interaction_depth)
+
+predictions <- predict(gbm_model, newdata = traindata)
+
+mse <- mean((predictions - traindata$revenue)^2);mse
+
+predictions <- predict(gbm_model, newdata = testdata)
+
+rsquared <- cor(traindata$revenue, predictions)^2
+print(paste("R-squared:", round(rsquared, 4)))
+#much better r squared than random forest model
 
 
+#Random Forest
+#without cross validation
+library(randomForest)
+
+predictor_names <- colnames(traindata)
+predictor_names <- predictor_names[-c(1,2,24)]
+predictors <- traindata[, predictor_names]
+response <- traindata$revenue
+
+
+num_trees <- 100
+mtry <- sqrt(ncol(predictors))
+nodesize <- 1
+
+rf_model <- randomForest(x = predictors, y = response, ntree = num_trees, mtry = mtry, nodesize = nodesize)
+print(rf_model)
+
+importance_measures <- importance(rf_model)
+print(importance_measures)
+
+#With cross-validation
+# Specify the number of folds for cross-validation
+num_folds <- 5
+
+# Define the control parameters for cross-validation
+ctrl <- trainControl(
+  method = "cv",            # Cross-validation method
+  number = num_folds,      # Number of folds
+  verboseIter = FALSE      # Whether to display verbose output during cross-validation
+)
+
+# Train a Random Forest model using cross-validation
+rf_model <- train(
+  revenue ~ .,            # Formula specifying the response variable and predictor variables
+  data = traindata,    # Training dataset
+  method = "rf",           # Specify Random Forest as the method
+  trControl = ctrl,        # Control parameters for cross-validation
+  ntree = 100,             # Number of trees in the Random Forest model
+  importance = TRUE       # Calculate variable importance measures
+)
+
+print(rf_model)
+#with cross validation, r square is 16%
+
+var_importance <- varImp(rf_model)
+print(importance_measures)
 
 ##### at bottom: all the test MSE
 
