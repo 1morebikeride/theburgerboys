@@ -12,27 +12,41 @@ traindata <- read.csv("train.csv")
 
 #data$Open.Date <- as.Date(Open.Date)
 
-
-
 #14 to 18
 # 24 to 27
 #30 to 37
 library(dplyr)
 
+#remove columns with missing data
 traindata <- select(traindata, -P14, -P15, -P16, -P17, -P18, -P24, -P25, -P26, -P27, -P30, -P31, -P32, -P33, -P34, -P35, -P36, -P37)
 
 
-# extract the year from the character date
-traindata$year <- substr(traindata$Open.Date, start = nchar(traindata$Open.Date) - 3, stop = nchar(traindata$Open.Date))
+#splitting date
+traindata$year <- substr(as.character(traindata$Open.Date),7,10) %>% as.factor()
+traindata$month <- substr(as.character(traindata$Open.Date),1,2) %>% as.factor()
+traindata$day <- substr(as.character(traindata$Open.Date),4,5) %>% as.numeric()
+traindata$Date <- as.Date(strptime(traindata$Open.Date, "%m/%d/%Y"))
 
-traindata$year <- as.numeric(traindata$year)
-traindata$age <- 2015 - traindata$year
+#creating days since opening and months since opening
+traindata$days <- as.numeric(as.Date("2014-02-02")-traindata$Date)
+traindata$months <- as.numeric(as.Date("2014-02-02")-traindata$Date) / 30
 
-traindata <- select(traindata, -Open.Date)
-traindata <- select(traindata, -year)
-traindata <- select(traindata, -Id)
+#remove columns
+traindata <- traindata[,-c(1,2,3,30)]
 
-traindata[, 3:42] <- lapply(traindata[, 3:42], factor)
+#change demo data to factors
+traindata[, 1:22] <- lapply(traindata[, 1:22], factor)
+
+#look for outliers
+boxplot(traindata$revenue,
+        main = "Boxplot of Revenue",
+        ylab = "Revenue",
+        col = "lightblue",
+        border = "black",
+        horizontal = TRUE)
+
+#remove outliers
+traindata <- traindata[traindata$revenue <= 13000000,]
 
 ### basic ridge and lasso
 library(glmnet)
@@ -82,76 +96,54 @@ lasso_mse <- mean((lasso.pred-y_train)^2)
 
 
 #Gradient Boosting Machine
+
+x <- traindata[,-23]
+y <- traindata[,23]
 library(gbm)
 library(caret)
-n_trees <- 100
-learning_rate <- 0.01
-interaction_depth <- 5
 
-#predictor_names <- colnames(traindata)
-#predictor_names <- predictor_names[-c(1,2,24)]
-#predictors <- traindata[, predictor_names]
-#response <- traindata$revenue
+trainControl <- trainControl(method = "cv",
+                             number = 10,
+                             returnResamp="all", ### use "all" to return all cross-validated metrics
+                             search = "grid")
 
-gbm_model <- gbm(revenue ~ ., data=traindata, n.trees = n_trees, shrinkage = learning_rate, interaction.depth = interaction_depth)
+tune.grid <- expand.grid(interaction.depth = c(6, 7, 8, 9),
+                       n.trees = (3:7) * 10,
+                       shrinkage = c(0.05),
+                       n.minobsinnode=c(5, 10, 15))
 
-predictions <- predict(gbm_model, newdata = traindata)
+gbm.op <- train(x, y,
+                method='gbm',
+                tuneGrid=tune.grid,
+                trControl=trainControl,
+                verbose=FALSE,
+                distribution='gaussian')
+                    
+#best hyperparameters
+best.tune <- gbm.op$bestTune
 
-mse <- mean((predictions - traindata$revenue)^2);mse
+#important variables
+spam7Imp <- varImp(gbm.op, scale = T)
+plot(spam7Imp, top = 5)
 
-predictions <- predict(gbm_model, newdata = testdata)
+#predicting with grid model
+pre_caret_gbm <- predict(gbm.op, newdata=traindata)
+grid.mse <- mean((pre_caret_gbm - traindata$revenue)^2)
 
-rsquared <- cor(traindata$revenue, predictions)^2
+#creating new best model
+best.mod <- gbm(revenue ~ ., data=traindata,
+                interaction.depth = best.tune$interaction.depth,
+                shrinkage = best.tune$shrinkage,
+                n.minobsinnode = best.tune$n.minobsinnode,
+                n.trees = best.tune$n.trees,
+                distribution='gaussian',
+                verbose=FALSE)
+
+pre_caret_gbm <- predict(best.mod, newdata=traindata)
+best.mod.mse <- mean((pre_caret_gbm - traindata$revenue)^2)
+
+rsquared <- cor(traindata$revenue, pre_caret_gbm)^2
 print(paste("R-squared:", round(rsquared, 4)))
-#much better r squared than random forest model
-
-
-#Random Forest
-#without cross validation
-library(randomForest)
-
-predictor_names <- colnames(traindata)
-predictor_names <- predictor_names[-c(1,2,24)]
-predictors <- traindata[, predictor_names]
-response <- traindata$revenue
-
-
-num_trees <- 100
-mtry <- sqrt(ncol(predictors))
-nodesize <- 1
-
-rf_model <- randomForest(x = predictors, y = response, ntree = num_trees, mtry = mtry, nodesize = nodesize)
-print(rf_model)
-
-importance_measures <- importance(rf_model)
-print(importance_measures)
-
-#With cross-validation
-# Specify the number of folds for cross-validation
-num_folds <- 5
-
-# Define the control parameters for cross-validation
-ctrl <- trainControl(
-  method = "cv",            # Cross-validation method
-  number = num_folds,      # Number of folds
-  verboseIter = FALSE      # Whether to display verbose output during cross-validation
-)
-
-# Train a Random Forest model using cross-validation
-rf_model <- train(
-  revenue ~ .,            # Formula specifying the response variable and predictor variables
-  data = traindata,    # Training dataset
-  method = "rf",           # Specify Random Forest as the method
-  trControl = ctrl,        # Control parameters for cross-validation
-  ntree = 100,             # Number of trees in the Random Forest model
-  importance = TRUE       # Calculate variable importance measures
-)
-
-print(rf_model)
-#with cross validation, r square is 16%
-
-var_importance <- varImp(rf_model)
-print(importance_measures)
 
 ##### at bottom: all the test MSE
 
