@@ -32,44 +32,7 @@ traindata <- select(traindata, -Open.Date)
 traindata <- select(traindata, -year)
 traindata <- select(traindata, -Id)
 
-               
-traindata$City <- as.factor(traindata$City)
-
-traindata$City.Group <- as.factor(traindata$City.Group)
-
-traindata$Type <- as.factor(traindata$Type)
-
-traindata$P1 <- as.factor(traindata$P1)
-
-traindata$P2 <- as.factor(traindata$P2)
-traindata$P3 <- as.factor(traindata$P3)
-traindata$P4 <- as.factor(traindata$P4)
-traindata$P5 <- as.factor(traindata$P5)
-traindata$P6 <- as.factor(traindata$P6)
-traindata$P7 <- as.factor(traindata$P7)
-traindata$P8 <- as.factor(traindata$P8)
-traindata$P9 <- as.factor(traindata$P9)
-traindata$P10 <- as.factor(traindata$P10)
-traindata$P11 <- as.factor(traindata$P11)
-traindata$P12 <- as.factor(traindata$P12)
-
-traindata$P13 <- as.factor(traindata$P13)
-traindata$P19 <- as.factor(traindata$P19)
-traindata$P20 <- as.factor(traindata$P20)
-
-traindata$P21 <- as.factor(traindata$P21)
-traindata$P22 <- as.factor(traindata$P22)
-traindata$P23 <- as.factor(traindata$P23)
-
-traindata$P28 <- as.factor(traindata$P28)
-traindata$P29 <- as.factor(traindata$P29)
-
-
-
-
-
-
-
+traindata[, 3:42] <- lapply(traindata[, 3:42], factor)
 
 ### basic ridge and lasso
 library(glmnet)
