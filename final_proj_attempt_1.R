@@ -94,6 +94,19 @@ lasso_mse <- mean((lasso.pred-y_train)^2)
 
 
 
+#Random Forest
+set.seed(1693)
+
+rf.mod <- randomForest(revenue~., traindata, ntree = 1000, max.depth=10)
+#varImpPlot(fit)
+rf.pred <- predict(rf.mod, traindata, type = "response")
+
+rf.mse <- mean((rf.pred - traindata$revenue)^2)
+
+rf.rsq <- R2(traindata$revenue, rf.pred)
+
+varImpPlot(rf.mod)
+
 
 #Gradient Boosting Machine
 
@@ -107,9 +120,9 @@ trainControl <- trainControl(method = "cv",
                              returnResamp="all", ### use "all" to return all cross-validated metrics
                              search = "grid")
 
-tune.grid <- expand.grid(interaction.depth = c(6, 7, 8, 9),
+tune.grid <- expand.grid(interaction.depth = c(6, 7, 8, 9, 10),
                        n.trees = (3:7) * 10,
-                       shrinkage = c(0.05),
+                       shrinkage = c(0.01, 0.05, 0.1),
                        n.minobsinnode=c(5, 10, 15))
 
 gbm.op <- train(x, y,
@@ -124,11 +137,11 @@ best.tune <- gbm.op$bestTune
 
 #important variables
 spam7Imp <- varImp(gbm.op, scale = T)
-plot(spam7Imp, top = 5)
+plot(spam7Imp, top=5)
 
 #predicting with grid model
-pre_caret_gbm <- predict(gbm.op, newdata=traindata)
-grid.mse <- mean((pre_caret_gbm - traindata$revenue)^2)
+grid.pred <- predict(gbm.op, newdata=traindata)
+grid.mse <- mean((grid.pred - traindata$revenue)^2)
 
 #creating new best model
 best.mod <- gbm(revenue ~ ., data=traindata,
@@ -139,16 +152,26 @@ best.mod <- gbm(revenue ~ ., data=traindata,
                 distribution='gaussian',
                 verbose=FALSE)
 
-pre_caret_gbm <- predict(best.mod, newdata=traindata)
-best.mod.mse <- mean((pre_caret_gbm - traindata$revenue)^2)
+best.pred <- predict(best.mod, newdata=traindata)
+best.mod.mse <- mean((best.pred - traindata$revenue)^2)
 
-rsquared <- cor(traindata$revenue, pre_caret_gbm)^2
-print(paste("R-squared:", round(rsquared, 4)))
-
-##### at bottom: all the test MSE
-
+best.gbm.rsq <- R2(traindata$revenue, best.pred)
 
 ridge_mse
 
 lasso_mse
+
+ridge.rsq <- R2(traindata$revenue, ridge.pred)
+
+lasso.rsq <- R2(traindata$revenue, lasso.pred)
+
+print(paste('Ridge MSE:', ridge_mse))
+print(paste('Lasso MSE:', lasso_mse))
+print(paste('Random Forest MSE:', rf.mse))
+print(paste('Gradient Boosting Machine MSE:', best.mod.mse))
+
+print(paste('Ridge R Squared:', round(ridge.rsq, 4)))
+print(paste('Lasso R Squared:', round(lasso.rsq, 4)))
+print(paste('Random Forest R Squared:', round(rf.rsq, 4)))
+print(paste('Gradient Boosting Machine R Squared:', round(best.gbm.rsq, 4)))
 
