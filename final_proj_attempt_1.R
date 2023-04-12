@@ -36,7 +36,10 @@ traindata <- traindata[,-c(1,2,3,30)]
 
 #change demo data to factors
 traindata[, 1:22] <- lapply(traindata[, 1:22], factor)
+traindata[,26] <- as.factor(traindata[,26])
 
+#remove day
+traindata <- traindata[,-26]
 #look for outliers
 boxplot(traindata$revenue,
         main = "Boxplot of Revenue",
@@ -106,8 +109,15 @@ rf.mse <- mean((rf.pred - traindata$revenue)^2)
 rf.rsq <- R2(traindata$revenue, rf.pred)
 
 varImpPlot(rf.mod)
+plot(rf.mod)
 
+rf.mod <- randomForest(revenue~., traindata, ntree = 100, max.depth=10)
+#varImpPlot(fit)
+rf.pred <- predict(rf.mod, traindata, type = "response")
 
+rf.mse <- mean((rf.pred - traindata$revenue)^2)
+
+rf.rsq <- R2(traindata$revenue, rf.pred)
 #Gradient Boosting Machine
 
 x <- traindata[,-23]
@@ -115,15 +125,16 @@ y <- traindata[,23]
 library(gbm)
 library(caret)
 
+set.seed(12)
 trainControl <- trainControl(method = "cv",
                              number = 10,
                              returnResamp="all", ### use "all" to return all cross-validated metrics
                              search = "grid")
 
 tune.grid <- expand.grid(interaction.depth = c(6, 7, 8, 9, 10),
-                       n.trees = (3:7) * 10,
+                       n.trees = (3:20) * 10,
                        shrinkage = c(0.01, 0.05, 0.1),
-                       n.minobsinnode=c(5, 10, 15))
+                       n.minobsinnode=c(2, 3, 4, 5, 10, 15))
 
 gbm.op <- train(x, y,
                 method='gbm',
@@ -131,7 +142,8 @@ gbm.op <- train(x, y,
                 trControl=trainControl,
                 verbose=FALSE,
                 distribution='gaussian')
-                    
+                   
+plot(gbm.op) 
 #best hyperparameters
 best.tune <- gbm.op$bestTune
 
@@ -152,6 +164,7 @@ best.mod <- gbm(revenue ~ ., data=traindata,
                 distribution='gaussian',
                 verbose=FALSE)
 
+#creating predictions with best model
 best.pred <- predict(best.mod, newdata=traindata)
 best.mod.mse <- mean((best.pred - traindata$revenue)^2)
 
