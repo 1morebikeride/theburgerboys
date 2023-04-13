@@ -3,23 +3,15 @@
 
 ## or go to session in the ribbon: set WD: to source file location 
 
-
 rm(list=ls())
-
 set.seed(1693)
 
 traindata <- read.csv("train.csv")
 
-#data$Open.Date <- as.Date(Open.Date)
-
-#14 to 18
-# 24 to 27
-#30 to 37
 library(dplyr)
 
 #remove columns with missing data
 traindata <- select(traindata, -P14, -P15, -P16, -P17, -P18, -P24, -P25, -P26, -P27, -P30, -P31, -P32, -P33, -P34, -P35, -P36, -P37)
-
 
 #splitting date
 traindata$year <- substr(as.character(traindata$Open.Date),7,10) %>% as.factor()
@@ -55,95 +47,68 @@ traindata <- traindata[traindata$revenue <= 13000000,]
 library(glmnet)
 set.seed(1)
 
-### we have NAs
-
-#traindata[is.na(traindata)] <- 0
-
-### we downloaded, just the training data, test data does not have revenue
-
 x_train <- model.matrix(revenue ~ ., traindata)[, -1]
-
 y_train <- traindata$revenue
-
-
-
 grid = 10^seq(-2, 4,length=200)
 
-
 ridge_mod <- glmnet(x_train, y_train, lambda = grid, alpha = 0)
-
 cv.ridge <- cv.glmnet(x_train, y_train, lambda = grid, alpha = 0, nfolds = 12)
-
 bestlam_ridge <- cv.ridge$lambda.min
-
-
 ridge.pred <- predict(ridge_mod, 
                       s=bestlam_ridge, 
                       newx=x_train)
 ridge_mse <- mean((ridge.pred-y_train)^2)
-
-
+ridge.rsq <- R2(traindata$revenue, ridge.pred)
 
 lasso.mod <- glmnet(x_train, y_train, lambda = grid, alpha = 1,)
-
 cv.lasso <- cv.glmnet(x_train, y_train, lambda = grid, alpha = 1, nfolds = 12)
-
 bestlam_lasso <- cv.lasso$lambda.min
-
 lasso.pred <- predict(lasso.mod, 
                       s=bestlam_lasso, 
                       newx=x_train)
 lasso_mse <- mean((lasso.pred-y_train)^2)
-
-
+lasso.rsq <- R2(traindata$revenue, lasso.pred)
 
 #Random Forest
 set.seed(1693)
 
 rf.mod <- randomForest(revenue~., traindata, ntree = 1000, max.depth=10)
-#varImpPlot(fit)
 rf.pred <- predict(rf.mod, traindata, type = "response")
-
 rf.mse <- mean((rf.pred - traindata$revenue)^2)
-
 rf.rsq <- R2(traindata$revenue, rf.pred)
-
 varImpPlot(rf.mod)
 plot(rf.mod)
 
-rf.mod <- randomForest(revenue~., traindata, ntree = 100, max.depth=10)
-#varImpPlot(fit)
+#creating model with fewer trees in case of overfitting
+rf.mod <- randomForest(revenue~., traindata, ntree = 200, max.depth=10)
 rf.pred <- predict(rf.mod, traindata, type = "response")
-
 rf.mse <- mean((rf.pred - traindata$revenue)^2)
-
 rf.rsq <- R2(traindata$revenue, rf.pred)
-#Gradient Boosting Machine
 
-x <- traindata[,-23]
-y <- traindata[,23]
+#Gradient Boosting Machine
 library(gbm)
 library(caret)
+x <- traindata[,-23]
+y <- traindata[,23]
 
 set.seed(12)
+
 trainControl <- trainControl(method = "cv",
                              number = 10,
-                             returnResamp="all", ### use "all" to return all cross-validated metrics
+                             returnResamp="all",
                              search = "grid")
-
 tune.grid <- expand.grid(interaction.depth = c(6, 7, 8, 9, 10),
                        n.trees = (3:20) * 10,
                        shrinkage = c(0.01, 0.05, 0.1),
                        n.minobsinnode=c(2, 3, 4, 5, 10, 15))
-
 gbm.op <- train(x, y,
                 method='gbm',
                 tuneGrid=tune.grid,
                 trControl=trainControl,
                 verbose=FALSE,
                 distribution='gaussian')
-                   
 plot(gbm.op) 
+
 #best hyperparameters
 best.tune <- gbm.op$bestTune
 
@@ -167,16 +132,7 @@ best.mod <- gbm(revenue ~ ., data=traindata,
 #creating predictions with best model
 best.pred <- predict(best.mod, newdata=traindata)
 best.mod.mse <- mean((best.pred - traindata$revenue)^2)
-
 best.gbm.rsq <- R2(traindata$revenue, best.pred)
-
-ridge_mse
-
-lasso_mse
-
-ridge.rsq <- R2(traindata$revenue, ridge.pred)
-
-lasso.rsq <- R2(traindata$revenue, lasso.pred)
 
 print(paste('Ridge MSE:', ridge_mse))
 print(paste('Lasso MSE:', lasso_mse))
