@@ -11,6 +11,8 @@ traindata <- read.csv("train.csv")
 library(dplyr)
 library(gbm)
 library(caret)
+library(randomForest)
+library(glmnet)
 
 #remove columns with missing data
 traindata <- select(traindata, -P14, -P15, -P16, -P17, -P18, -P24, -P25, -P26, -P27, -P30, -P31, -P32, -P33, -P34, -P35, -P36, -P37)
@@ -46,13 +48,12 @@ boxplot(traindata$revenue,
 traindata <- traindata[traindata$revenue <= 13000000,]
 
 ### basic ridge and lasso
-library(glmnet)
+
 set.seed(1693)
 
 
 
 
-### we downloaded, just the training data, test data does not have revenue
 
 
 x_train <- model.matrix(revenue ~ ., traindata)[, -1]
@@ -65,11 +66,14 @@ cv.ridge <- cv.glmnet(x_train, y_train, lambda = grid, alpha = 0, nfolds = 12)
 plot(cv.ridge)
 
 bestlam_ridge <- cv.ridge$lambda.min
+bestlam_ridge
 ridge.pred <- predict(ridge_mod, 
                       s=bestlam_ridge, 
                       newx=x_train)
 ridge_mse <- mean((ridge.pred-y_train)^2)
+ridge_mse
 ridge.rsq <- R2(traindata$revenue, ridge.pred)
+ridge.rsq
 
 best_ridge_coef <- coef(ridge_mod, s = bestlam_ridge)
 best_ridge_coef
@@ -87,8 +91,11 @@ lasso.pred <- predict(lasso.mod,
 best_lasso_coef <- coef(lasso.mod, s = bestlam_lasso)
 best_lasso_coef
 lasso_mse <- mean((lasso.pred-y_train)^2)
+lasso_mse  ## higher than ridge
 lasso.rsq <- R2(traindata$revenue, lasso.pred)
+lasso.rsq  ## lower than ridge
 
+# worse performance
 
 
 #Random Forest
@@ -128,7 +135,6 @@ gbm.op <- train(x, y,
                 trControl=trainControl,
                 verbose=FALSE,
                 distribution='gaussian')
-plot(gbm.op) 
 
 #best hyperparameters
 best.tune <- gbm.op$bestTune
