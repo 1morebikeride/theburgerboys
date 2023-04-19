@@ -3,36 +3,45 @@
 
 ## or go to session in the ribbon: set WD: to source file location 
 
-
 rm(list=ls())
-
 set.seed(1693)
 
 traindata <- read.csv("train.csv")
 
-#data$Open.Date <- as.Date(Open.Date)
-
-
-
-#14 to 18
-# 24 to 27
-#30 to 37
 library(dplyr)
 
+#remove columns with missing data
 traindata <- select(traindata, -P14, -P15, -P16, -P17, -P18, -P24, -P25, -P26, -P27, -P30, -P31, -P32, -P33, -P34, -P35, -P36, -P37)
 
+#splitting date
+traindata$year <- substr(as.character(traindata$Open.Date),7,10) %>% as.factor()
+traindata$month <- substr(as.character(traindata$Open.Date),1,2) %>% as.factor()
+traindata$day <- substr(as.character(traindata$Open.Date),4,5) %>% as.numeric()
+traindata$Date <- as.Date(strptime(traindata$Open.Date, "%m/%d/%Y"))
 
-# extract the year from the character date
-traindata$year <- substr(traindata$Open.Date, start = nchar(traindata$Open.Date) - 3, stop = nchar(traindata$Open.Date))
+#creating days since opening and months since opening
+traindata$days <- as.numeric(as.Date("2014-02-02")-traindata$Date)
+traindata$months <- as.numeric(as.Date("2014-02-02")-traindata$Date) / 30
 
-traindata$year <- as.numeric(traindata$year)
-traindata$age <- 2015 - traindata$year
+#remove columns
+traindata <- traindata[,-c(1,2,3,30)]
 
-traindata <- select(traindata, -Open.Date)
-traindata <- select(traindata, -year)
-traindata <- select(traindata, -Id)
+#change demo data to factors
+traindata[, 1:22] <- lapply(traindata[, 1:22], factor)
+traindata[,26] <- as.factor(traindata[,26])
 
-traindata[, 3:42] <- lapply(traindata[, 3:42], factor)
+#remove day
+traindata <- traindata[,-26]
+#look for outliers
+boxplot(traindata$revenue,
+        main = "Boxplot of Revenue",
+        ylab = "Revenue",
+        col = "lightblue",
+        border = "black",
+        horizontal = TRUE)
+
+#remove outliers
+traindata <- traindata[traindata$revenue <= 13000000,]
 
 ### basic ridge and lasso
 library(glmnet)
@@ -40,121 +49,104 @@ set.seed(1)
 
 
 
+
 ### we downloaded, just the training data, test data does not have revenue
 
+
 x_train <- model.matrix(revenue ~ ., traindata)[, -1]
-
 y_train <- traindata$revenue
-
-
-
 grid = 10^seq(-2, 4,length=200)
 
-
 ridge_mod <- glmnet(x_train, y_train, lambda = grid, alpha = 0)
-
 cv.ridge <- cv.glmnet(x_train, y_train, lambda = grid, alpha = 0, nfolds = 12)
-
 bestlam_ridge <- cv.ridge$lambda.min
-
-
 ridge.pred <- predict(ridge_mod, 
                       s=bestlam_ridge, 
                       newx=x_train)
 ridge_mse <- mean((ridge.pred-y_train)^2)
-
-
+ridge.rsq <- R2(traindata$revenue, ridge.pred)
 
 lasso.mod <- glmnet(x_train, y_train, lambda = grid, alpha = 1,)
-
 cv.lasso <- cv.glmnet(x_train, y_train, lambda = grid, alpha = 1, nfolds = 12)
-
 bestlam_lasso <- cv.lasso$lambda.min
-
 lasso.pred <- predict(lasso.mod, 
                       s=bestlam_lasso, 
                       newx=x_train)
 lasso_mse <- mean((lasso.pred-y_train)^2)
+lasso.rsq <- R2(traindata$revenue, lasso.pred)
 
+#Random Forest
+set.seed(1693)
 
+rf.mod <- randomForest(revenue~., traindata, ntree = 1000, max.depth=10)
+rf.pred <- predict(rf.mod, traindata, type = "response")
+rf.mse <- mean((rf.pred - traindata$revenue)^2)
+rf.rsq <- R2(traindata$revenue, rf.pred)
+varImpPlot(rf.mod)
+plot(rf.mod)
 
+#creating model with fewer trees in case of overfitting
+rf.mod <- randomForest(revenue~., traindata, ntree = 200, max.depth=10)
+rf.pred <- predict(rf.mod, traindata, type = "response")
+rf.mse <- mean((rf.pred - traindata$revenue)^2)
+rf.rsq <- R2(traindata$revenue, rf.pred)
 
 #Gradient Boosting Machine
 library(gbm)
 library(caret)
-n_trees <- 100
-learning_rate <- 0.01
-interaction_depth <- 5
+x <- traindata[,-23]
+y <- traindata[,23]
 
-#predictor_names <- colnames(traindata)
-#predictor_names <- predictor_names[-c(1,2,24)]
-#predictors <- traindata[, predictor_names]
-#response <- traindata$revenue
+set.seed(12)
 
-gbm_model <- gbm(revenue ~ ., data=traindata, n.trees = n_trees, shrinkage = learning_rate, interaction.depth = interaction_depth)
+trainControl <- trainControl(method = "cv",
+                             number = 10,
+                             returnResamp="all",
+                             search = "grid")
+tune.grid <- expand.grid(interaction.depth = c(6, 7, 8, 9, 10),
+                       n.trees = (3:20) * 10,
+                       shrinkage = c(0.01, 0.05, 0.1),
+                       n.minobsinnode=c(2, 3, 4, 5, 10, 15))
+gbm.op <- train(x, y,
+                method='gbm',
+                tuneGrid=tune.grid,
+                trControl=trainControl,
+                verbose=FALSE,
+                distribution='gaussian')
+plot(gbm.op) 
 
-predictions <- predict(gbm_model, newdata = traindata)
+#best hyperparameters
+best.tune <- gbm.op$bestTune
 
-mse <- mean((predictions - traindata$revenue)^2);mse
+#important variables
+spam7Imp <- varImp(gbm.op, scale = T)
+plot(spam7Imp, top=5)
 
-predictions <- predict(gbm_model, newdata = testdata)
+#predicting with grid model
+grid.pred <- predict(gbm.op, newdata=traindata)
+grid.mse <- mean((grid.pred - traindata$revenue)^2)
 
-rsquared <- cor(traindata$revenue, predictions)^2
-print(paste("R-squared:", round(rsquared, 4)))
-#much better r squared than random forest model
+#creating new best model
+best.mod <- gbm(revenue ~ ., data=traindata,
+                interaction.depth = best.tune$interaction.depth,
+                shrinkage = best.tune$shrinkage,
+                n.minobsinnode = best.tune$n.minobsinnode,
+                n.trees = best.tune$n.trees,
+                distribution='gaussian',
+                verbose=FALSE)
 
+#creating predictions with best model
+best.pred <- predict(best.mod, newdata=traindata)
+best.mod.mse <- mean((best.pred - traindata$revenue)^2)
+best.gbm.rsq <- R2(traindata$revenue, best.pred)
 
-#Random Forest
-#without cross validation
-library(randomForest)
+print(paste('Ridge MSE:', ridge_mse))
+print(paste('Lasso MSE:', lasso_mse))
+print(paste('Random Forest MSE:', rf.mse))
+print(paste('Gradient Boosting Machine MSE:', best.mod.mse))
 
-predictor_names <- colnames(traindata)
-predictor_names <- predictor_names[-c(1,2,24)]
-predictors <- traindata[, predictor_names]
-response <- traindata$revenue
-
-
-num_trees <- 100
-mtry <- sqrt(ncol(predictors))
-nodesize <- 1
-
-rf_model <- randomForest(x = predictors, y = response, ntree = num_trees, mtry = mtry, nodesize = nodesize)
-print(rf_model)
-
-importance_measures <- importance(rf_model)
-print(importance_measures)
-
-#With cross-validation
-# Specify the number of folds for cross-validation
-num_folds <- 5
-
-# Define the control parameters for cross-validation
-ctrl <- trainControl(
-  method = "cv",            # Cross-validation method
-  number = num_folds,      # Number of folds
-  verboseIter = FALSE      # Whether to display verbose output during cross-validation
-)
-
-# Train a Random Forest model using cross-validation
-rf_model <- train(
-  revenue ~ .,            # Formula specifying the response variable and predictor variables
-  data = traindata,    # Training dataset
-  method = "rf",           # Specify Random Forest as the method
-  trControl = ctrl,        # Control parameters for cross-validation
-  ntree = 100,             # Number of trees in the Random Forest model
-  importance = TRUE       # Calculate variable importance measures
-)
-
-print(rf_model)
-#with cross validation, r square is 16%
-
-var_importance <- varImp(rf_model)
-print(importance_measures)
-
-##### at bottom: all the test MSE
-
-
-ridge_mse
-
-lasso_mse
+print(paste('Ridge R Squared:', round(ridge.rsq, 4)))
+print(paste('Lasso R Squared:', round(lasso.rsq, 4)))
+print(paste('Random Forest R Squared:', round(rf.rsq, 4)))
+print(paste('Gradient Boosting Machine R Squared:', round(best.gbm.rsq, 4)))
 
