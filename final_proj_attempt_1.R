@@ -9,6 +9,8 @@ set.seed(1693)
 traindata <- read.csv("train.csv")
 
 library(dplyr)
+library(gbm)
+library(caret)
 
 #remove columns with missing data
 traindata <- select(traindata, -P14, -P15, -P16, -P17, -P18, -P24, -P25, -P26, -P27, -P30, -P31, -P32, -P33, -P34, -P35, -P36, -P37)
@@ -45,7 +47,7 @@ traindata <- traindata[traindata$revenue <= 13000000,]
 
 ### basic ridge and lasso
 library(glmnet)
-set.seed(1)
+set.seed(1693)
 
 
 
@@ -59,6 +61,9 @@ grid = 10^seq(-2, 4,length=200)
 
 ridge_mod <- glmnet(x_train, y_train, lambda = grid, alpha = 0)
 cv.ridge <- cv.glmnet(x_train, y_train, lambda = grid, alpha = 0, nfolds = 12)
+
+plot(cv.ridge)
+
 bestlam_ridge <- cv.ridge$lambda.min
 ridge.pred <- predict(ridge_mod, 
                       s=bestlam_ridge, 
@@ -66,14 +71,25 @@ ridge.pred <- predict(ridge_mod,
 ridge_mse <- mean((ridge.pred-y_train)^2)
 ridge.rsq <- R2(traindata$revenue, ridge.pred)
 
+best_ridge_coef <- coef(ridge_mod, s = bestlam_ridge)
+best_ridge_coef
+
 lasso.mod <- glmnet(x_train, y_train, lambda = grid, alpha = 1,)
 cv.lasso <- cv.glmnet(x_train, y_train, lambda = grid, alpha = 1, nfolds = 12)
+
+plot(cv.lasso)
+
 bestlam_lasso <- cv.lasso$lambda.min
 lasso.pred <- predict(lasso.mod, 
                       s=bestlam_lasso, 
                       newx=x_train)
+
+best_lasso_coef <- coef(lasso.mod, s = bestlam_lasso)
+best_lasso_coef
 lasso_mse <- mean((lasso.pred-y_train)^2)
 lasso.rsq <- R2(traindata$revenue, lasso.pred)
+
+
 
 #Random Forest
 set.seed(1693)
@@ -92,12 +108,11 @@ rf.mse <- mean((rf.pred - traindata$revenue)^2)
 rf.rsq <- R2(traindata$revenue, rf.pred)
 
 #Gradient Boosting Machine
-library(gbm)
-library(caret)
+
 x <- traindata[,-23]
 y <- traindata[,23]
 
-set.seed(12)
+set.seed(1693)
 
 trainControl <- trainControl(method = "cv",
                              number = 10,
