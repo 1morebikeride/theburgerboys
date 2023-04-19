@@ -38,9 +38,7 @@ traindata[, 3:42] <- lapply(traindata[, 3:42], factor)
 library(glmnet)
 set.seed(1)
 
-### we have NAs
 
-#traindata[is.na(traindata)] <- 0
 
 ### we downloaded, just the training data, test data does not have revenue
 
