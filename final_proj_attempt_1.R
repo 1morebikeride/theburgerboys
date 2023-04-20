@@ -1,7 +1,4 @@
-#setwd("C:/Users/andre/Documents/msba/machine_learning/theburgerboys")
-###add ur wd however it is to get data in, I can't get in the test data
-
-## or go to session in the ribbon: set WD: to source file location 
+## Go to session in the ribbon: set WD: to source file location 
 
 rm(list=ls())
 set.seed(1693)
@@ -27,7 +24,7 @@ traindata$Date <- as.Date(strptime(traindata$Open.Date, "%m/%d/%Y"))
 traindata$days <- as.numeric(as.Date("2014-02-02")-traindata$Date)
 traindata$months <- as.numeric(as.Date("2014-02-02")-traindata$Date) / 30
 
-#remove columns
+#remove columns like id, city, open date
 traindata <- traindata[,-c(1,2,3,30)]
 
 #change demo data to factors
@@ -58,11 +55,15 @@ set.seed(1693)
 
 x_train <- model.matrix(revenue ~ ., traindata)[, -1]
 y_train <- traindata$revenue
+
 grid = 10^seq(-2, 4,length=200)
 
 ridge_mod <- glmnet(x_train, y_train, lambda = grid, alpha = 0)
 cv.ridge <- cv.glmnet(x_train, y_train, lambda = grid, alpha = 0, nfolds = 12)
 
+#this is a sign of overfitting, if plug in larger lambda values the best ends up being about 8.5 million
+
+# very large lambda value is indication of overfitting
 plot(cv.ridge)
 
 bestlam_ridge <- cv.ridge$lambda.min
@@ -77,6 +78,7 @@ ridge.rsq
 
 best_ridge_coef <- coef(ridge_mod, s = bestlam_ridge)
 best_ridge_coef
+### doesn't shrink much, even with higher lambda values
 
 lasso.mod <- glmnet(x_train, y_train, lambda = grid, alpha = 1,)
 cv.lasso <- cv.glmnet(x_train, y_train, lambda = grid, alpha = 1, nfolds = 12)
